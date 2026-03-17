@@ -1,8 +1,0 @@
-Django>=4.2
-djangorestframework
-djangorestframework-simplejwt
-psycopg2-binary
-redis
-django-cors-headers
-djangorestframework==3.14.0
-djangorestframework-simplejwt==5.3.0

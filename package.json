@@ -1,0 +1,10 @@
+{
+  "name": "project-root",
+  "private": true,
+  "workspaces": ["project_root/frontend", "project_root/backend"],
+  "scripts": {
+    "dev": "cd project_root/frontend && npm run dev",
+    "serve": "cd project_root/backend && python manage.py runserver",
+    "db:migrate": "cd project_root/backend && python manage.py migrate"
+  }
+}
