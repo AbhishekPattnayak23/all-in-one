@@ -98,3 +98,18 @@ REST_FRAMEWORK = {
         'rest_framework.permissions.IsAuthenticated',
     ],
 }
+
+INSTALLED_APPS += [
+    'channels',
+    'authentication',
+    'dashboard',
+    'notifications',
+    'governance',
+]
+
+ASGI_APPLICATION = 'backend.asgi.application'
+CHANNEL_LAYERS = {
+    'default': {
+        'BACKEND': 'channels.layers.InMemoryChannelLayer',
+    }
+}

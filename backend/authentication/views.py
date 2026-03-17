@@ -4,4 +4,4 @@ from rest_framework.response import Response
 
 class HelloWorldView(APIView):
     def get(self, request):
-        return Response({"message": "Hello from governance"})
+        return Response({"message": "Hello from authentication"})
