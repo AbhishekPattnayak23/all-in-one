@@ -1,43 +1,93 @@
-import pytest
-from services.auth_service import AuthService
-from services.user_store import UserStore
+import unittest
+import json
+from app import create_app, db
+from app.models.user import User
 
-def test_password_hashing():
-    auth_service = AuthService()
-    password = "test123"
-    hashed = auth_service.hash_password(password)
+class AuthTestCase(unittest.TestCase):
+    def setUp(self):
+        self.app = create_app()
+        self.app.config['TESTING'] = True
+        self.app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///:memory:'
+        self.client = self.app.test_client()
+        
+        with self.app.app_context():
+            db.create_all()
     
-    assert hashed != password
-    assert auth_service.verify_password(password, hashed)
-    assert not auth_service.verify_password("wrong", hashed)
+    def tearDown(self):
+        with self.app.app_context():
+            db.session.remove()
+            db.drop_all()
+    
+    def test_successful_registration(self):
+        """Test successful user registration"""
+        response = self.client.post('/api/auth/register', json={
+            'username': 'testuser',
+            'email': 'test@example.com'
+        })
+        self.assertEqual(response.status_code, 201)
+        data = json.loads(response.data)
+        self.assertEqual(data['message'], 'Registration successful')
+        self.assertEqual(data['user']['username'], 'testuser')
+    
+    def test_duplicate_username(self):
+        """Test registration with existing username"""
+        with self.app.app_context():
+            User.create_user('testuser', 'test1@example.com')
+        
+        response = self.client.post('/api/auth/register', json={
+            'username': 'testuser',
+            'email': 'test2@example.com'
+        })
+        self.assertEqual(response.status_code, 409)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'Username already taken')
+    
+    def test_duplicate_email(self):
+        """Test registration with existing email"""
+        with self.app.app_context():
+            User.create_user('testuser1', 'test@example.com')
+        
+        response = self.client.post('/api/auth/register', json={
+            'username': 'testuser2',
+            'email': 'test@example.com'
+        })
+        self.assertEqual(response.status_code, 409)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'Email already registered')
+    
+    def test_invalid_email(self):
+        """Test registration with invalid email"""
+        response = self.client.post('/api/auth/register', json={
+            'username': 'testuser',
+            'email': 'invalid-email'
+        })
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'Invalid email format')
+    
+    def test_short_username(self):
+        """Test registration with short username"""
+        response = self.client.post('/api/auth/register', json={
+            'username': 'ab',
+            'email': 'test@example.com'
+        })
+        self.assertEqual(response.status_code, 400)
+        data = json.loads(response.data)
+        self.assertEqual(data['error'], 'Username must be at least 3 characters long')
+    
+    def test_missing_data(self):
+        """Test registration with missing data"""
+        # Missing username
+        response = self.client.post('/api/auth/register', json={
+            'email': 'test@example.com'
+        })
+        self.assertEqual(response.status_code, 400)
+        
+        # Missing email
+        response = self.client.post('/api/auth/register', json={
+            'username': 'testuser'
+        })
+        self.assertEqual(response.status_code, 400)
 
-def test_user_validation():
-    user_store = UserStore()
-    
-    # Test with demo user
-    user = user_store.validate_user_credentials("demo@example.com", "password123")
-    assert user is not None
-    assert user.email == "demo@example.com"
-    
-    # Test wrong password
-    user = user_store.validate_user_credentials("demo@example.com", "wrongpass")
-    assert user is None
-    
-    # Test non-existent user
-    user = user_store.validate_user_credentials("nonexistent@test.com", "pass")
-    assert user is None
-
-def test_jwt_generation():
-    auth_service = AuthService()
-    from models.user import User
-    
-    user = User(id="test-1", email="test@example.com", password_hash="hash")
-    token = auth_service.generate_token(user)
-    
-    assert isinstance(token, str)
-    assert len(token) > 0
-    
-    payload = auth_service.decode_token(token)
-    assert payload is not None
-    assert payload['user_id'] == user.id
-    assert payload['email'] == user.email
+if __name__ == '__main__':
+    unittest.main()
