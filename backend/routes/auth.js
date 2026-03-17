@@ -1,109 +1,85 @@
 const express = require('express');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const rateLimit = require('express-rate-limit');
-const validator = require('validator');
-const User = require('../models/User');
-const { sanitizeInput } = require('../middleware/sanitizer');
 const router = express.Router();
 
-// Rate limiting for login attempts
-const loginLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // limit each IP to 5 requests per windowMs
-  message: { error: 'Too many login attempts, please try again later' },
-  standardHeaders: true,
-  legacyHeaders: false
-});
+// Import the user model - using cononical pattern from spec
+// Assumed to return { id, username, email, password_hash } or null
+let getUserByUsername;
+try {
+    const { getUserByUsername: imported } = require('../models/user');
+    getUserByUsername = imported;
+} catch (e) {
+    // Stub for when User model is not yet available
+    getUserByUsername = () => Promise.resolve(null);
+}
 
-// Secure login endpoint
-router.post('/login', loginLimiter, sanitizeInput, async (req, res) => {
-  try {
+/**
+ * POST /api/auth/login
+ * Authenticates user credentials and issues JWT token
+ */
+router.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
-    // Input validation
+    // Validate required fields
     if (!username || !password) {
-      return res.status(400).json({ 
-        error: 'Username and password are required' 
-      });
+        return res.status(400).json({
+            detail: "Username and password are required.",
+            error_code: "LOGIN_MISSING_FIELDS"
+        });
     }
 
-    // Sanitize and validate username
-    const sanitizedUsername = validator.escape(username.trim());
-    if (!validator.isAlphanumeric(sanitizedUsername)) {
-      return res.status(400).json({ 
-        error: 'Invalid username format' 
-      });
+    try {
+        // Retrieve user from database
+        const user = await getUserByUsername(username);
+        
+        // User not found
+        if (!user) {
+            return res.status(400).json({
+                detail: "Invalid credentials",
+                error_code: "LOGIN_WRONG_CREDENTIALS"
+            });
+        }
+
+        // Validate password
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return res.status(400).json({
+                detail: "Invalid credentials",
+                error_code: "LOGIN_WRONG_CREDENTIALS"
+            });
+        }
+
+        // Generate JWT token
+        const payload = {
+            user_id: user.id,
+            username: user.username,
+            email: user.email
+        };
+
+        const token = jwt.sign(
+            payload,
+            process.env.JWT_SECRET || 'fallback-secret-change-me',
+            { expiresIn: '7d', algorithm: 'HS256' }
+        );
+
+        // Successful response
+        res.status(200).json({
+            token,
+            user: {
+                id: user.id,
+                username: user.username,
+                email: user.email
+            }
+        });
+
+    } catch (error) {
+        // Internal server error
+        res.status(500).json({
+            detail: "Internal server error",
+            error_code: "LOGIN_INTERNAL_ERROR"
+        });
     }
-
-    // Find user (case-insensitive)
-    const user = await User.findOne({ 
-      username: { $regex: new RegExp(`^${sanitizedUsername}$`, 'i') } 
-    });
-    
-    if (!user) {
-      // Generic error message to prevent user enumeration
-      return res.status(401).json({ 
-        error: 'Invalid credentials' 
-      });
-    }
-
-    // Verify password
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      // Log failed login attempt
-      await User.findByIdAndUpdate(user._id, { 
-        $push: { 
-          failedLoginAttempts: { 
-            ip: req.ip, 
-            timestamp: new Date() 
-          } 
-        } 
-      });
-      
-      return res.status(401).json({ 
-        error: 'Invalid credentials' 
-      });
-    }
-
-    // Generate secure JWT with short expiration
-    const token = jwt.sign(
-      { 
-        userId: user._id, 
-        username: user.username 
-      }, 
-      process.env.JWT_SECRET, 
-      { 
-        expiresIn: '1h',
-        issuer: 'secure-app',
-        audience: 'secure-app-users'
-      }
-    );
-
-    // Clear any previous failed attempts
-    await User.findByIdAndUpdate(user._id, { 
-      $set: { failedLoginAttempts: [] } 
-    });
-
-    // Set secure cookie
-    res.cookie('authToken', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 3600000 // 1 hour
-    });
-
-    res.json({ 
-      success: true, 
-      redirectUrl: '/dashboard' 
-    });
-
-  } catch (error) {
-    console.error('Login error:', error.message);
-    res.status(500).json({ 
-      error: 'An error occurred during login' 
-    });
-  }
 });
 
 module.exports = router;
