@@ -1,80 +1,37 @@
-from rest_framework import status
-from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated
+from rest_framework import serializers, viewsets, status
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-from django.contrib.auth.models import User
+from django.contrib.auth import get_user_model
 from .models import Notification
-from .serializers import SendNotificationSerializer, NotificationSerializer
+from authentication.permissions import IsAuthenticated
 
-@api_view(['POST'])
-@permission_classes([IsAuthenticated])
-def send_notification(request):
+User = get_user_model()
+
+class NotificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Notification
+        fields = ['id', 'sender', 'recipient', 'message', 'is_read', 'created_at']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        # Ensure sender and recipient are serialized as user IDs
+        data['sender'] = instance.sender.id
+        data['recipient'] = instance.recipient.id
+        return data
+
+class ReceiveNotificationsViewSet(viewsets.ReadOnlyModelViewSet):
     """
-    Send notification to another user
-    Endpoint: POST /api/send_notification/
-
-    Request Body:
-    {
-        "sender": int,
-        "recipient": int,
-        "message": str
-    }
-
-    Response:
-    {
-        "id": int,
-        "sender": int,
-        "recipient": int,
-        "message": str,
-        "timestamp": "2023-10-20T14:30:00Z"
-    }
+    ViewSet for receiving user notifications
+    Returns only notifications for the authenticated user
     """
-    # Enforce sender matches authenticated user
-    data = request.data.copy()
-    data['sender'] = request.user.id
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
 
-    serializer = SendNotificationSerializer(data=data)
+    def get_queryset(self):
+        return Notification.objects.filter(
+            recipient=self.request.user
+        ).order_by('-created_at')
 
-    if serializer.is_valid():
-        notification = serializer.save()
-        response_data = {
-            'id': notification.id,
-            'sender': notification.sender.id,
-            'recipient': notification.recipient.id,
-            'message': notification.message,
-            'timestamp': notification.timestamp.isoformat()
-        }
-        return Response(response_data, status=status.HTTP_201_CREATED)
-
-    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-@api_view(['GET'])
-@permission_classes([IsAuthenticated])
-def receive_notifications(request):
-    """
-    Get all notifications for the authenticated user
-    Endpoint: GET /api/notifications/receive/
-
-    Response:
-    [
-        {
-            "id": int,
-            "sender": int,
-            "message": str,
-            "timestamp": "2023-10-20T14:30:00Z"
-        }
-    ]
-    """
-    notifications = Notification.objects.filter(recipient=request.user)
-
-    response_data = []
-    for notification in notifications:
-        response_data.append({
-            'id': notification.id,
-            'sender': notification.sender.id,
-            'message': notification.message,
-            'timestamp': notification.timestamp.isoformat()
-        })
-
-    return Response(response_data, status=status.HTTP_200_OK)
+    def list(self, request, *args, **kwargs):
+        queryset = self.get_queryset()
+        serializer = self.get_serializer(queryset, many=True)
+        return Response(serializer.data)

@@ -14,11 +14,13 @@ Class-based views
     path('api/', include('apps.notifications.urls.notification_urls')),
 Including another URLconf
     1. Import the include() function: from django.urls import path, include
+from django.urls import include
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
     path('api/', include('apps.notifications.urls.notification_urls')),
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.urls import include
 
 urlpatterns = [
     path('api/', include('apps.notifications.urls.notification_urls')),
@@ -28,3 +30,5 @@ urlpatterns = [
     path('api/', include('notifications.urls')),
     path('api/', include('governance.urls')),
 ]
+from django.urls import include
+urlpatterns += [path('api/receive_notifications/', include('notifications.urls'))]
