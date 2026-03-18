@@ -1,0 +1,8 @@
+Django==4.2.*
+djangorestframework
+celery
+redis
+psycopg2-binary
+channels
+channels-redis
+python-decouple
