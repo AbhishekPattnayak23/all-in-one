@@ -1,29 +1,41 @@
-import os
-import sys
-import django
-
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'settings')
-django.setup()
-
+from django.test import TestCase
 from django.contrib.auth.models import User
-from django.test import Client
-import json
+from models.notification_model import Notification
 
-# Create test users
-sender = User.objects.create_user(username='test_sender', password='test123', email='sender@test.com')
-recipient = User.objects.create_user(username='test_recipient', password='test123', email='recipient@test.com')
+class NotificationModelTest(TestCase):
+    def setUp(self):
+        self.sender = User.objects.create_user(
+            username='sender',
+            password='testpass123'
+        )
+        self.recipient = User.objects.create_user(
+            username='recipient',
+            password='testpass123'
+        )
 
-# Test API
-client = Client()
-response = client.post(
-    '/api/send_notification/',
-    data=json.dumps({
-        'sender': sender.id,
-        'recipient': recipient.id,
-        'message': 'Test notification message'
-    }),
-    content_type='application/json'
-)
+    def test_notification_creation(self):
+        notification = Notification.create_notification(
+            sender=self.sender,
+            recipient=self.recipient,
+            message='Hello World!'
+        )
+        self.assertEqual(notification.sender.username, 'sender')
+        self.assertEqual(notification.recipient.username, 'recipient')
+        self.assertEqual(notification.message, 'Hello World!')
+        self.assertFalse(notification.is_read)
 
-print('Status:', response.status_code)
-print('Response:', response.json())
+    def test_unread_count(self):
+        Notification.create_notification(
+            sender=self.sender,
+            recipient=self.recipient,
+            message='Test 1'
+        )
+        Notification.create_notification(
+            sender=self.sender,
+            recipient=self.recipient,
+            message='Test 2'
+        )
+        self.assertEqual(
+            Notification.get_unread_count(self.recipient),
+            2
+        )

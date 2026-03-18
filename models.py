@@ -10,3 +10,6 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification from {self.sender} to {self.recipient}: {self.message[:50]}..."
+
+# Import notification model
+from models.notification_model import Notification

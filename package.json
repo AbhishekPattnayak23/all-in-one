@@ -1,11 +1,1 @@
-{
-  "name": "master-agent",
-  "version": "1.0.0",
-  "scripts": {
-    "dev": "echo 'Development mode not configured'",
-    "build": "echo 'Build completed - static files ready'",
-    "start": "echo 'Production server ready'"
-  },
-  "devDependencies": {},
-  "dependencies": {}
-}
+
